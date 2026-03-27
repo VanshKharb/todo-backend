@@ -6,7 +6,7 @@ const { auth, JWT_SECRET } = require("./auth");
 
 const mongoose = require("mongoose");
 const { UserModel, TodoModel } = require("./db");
-mongoose.connect("mongodb+srv://admin:***REMOVED***@cluster0.haxem7m.mongodb.net/todo");
+mongoose.connect("");
 
 const bcrypt = require("bcrypt");
 const { z } = require("zod");
@@ -19,6 +19,16 @@ app.post("/signup", async (req, res) => {
         name: z.string(),
         password: z.string()
     });
+
+    // const parsedData = requiredBody.parse(req.body);
+    const parsedDataWithSuccess = requiredBody.safeParse(req.body);
+
+    if (!parsedDataWithSuccess.success) {
+        res.json({
+            message: "incorrect format",
+            error: parsedDataWithSuccess.error
+        })
+    }
 
     const email = req.body.email;
     const password = req.body.password;
