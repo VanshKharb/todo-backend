@@ -15,88 +15,116 @@ app.use(express.json());
 
 app.post("/signup", async (req, res) => {
     const requiredBody = z.object({
-        email: z.string().min(3).max(100).email(),
-        name: z.string(),
-        password: z.string()
+        email: z.string().email().max(100),
+        name: z.string().min(1).max(50),
+        password: z.string().min(8).max(50),
     });
 
-    // const parsedData = requiredBody.parse(req.body);
     const parsedDataWithSuccess = requiredBody.safeParse(req.body);
 
     if (!parsedDataWithSuccess.success) {
-        res.json({
+        return res.status(400).json({
             message: "incorrect format",
             error: parsedDataWithSuccess.error
         })
     }
 
-    const email = req.body.email;
-    const password = req.body.password;
-    const name = req.body.name;
+    const {email, name, password} = parsedDataWithSuccess.data;
 
-    let errorThrown = false;
     try {
-        const hashedPassword = await bcrypt.hash(password, 5);
-        console.log(hashedPassword);
+        const hashedPassword = await bcrypt.hash(password, 10);
 
         await UserModel.create({
             email: email,
             password: hashedPassword,
             name: name
         });
-    }
-    catch(e) {
-        res.json({
-            message: "user already exists"
-        })
-        errorThrown = true;
-    }
 
-    if (!errorThrown) {
-        res.json({
+        return res.json({
             message: "You are signed up"
         });
+    }
+    catch(e) {
+        if (e.code === 11000) {
+            return res.status(409).json({
+                message: "User already exists",
+            });
+        }
+        else {
+            res.status(500).json({
+                message: "Internal server error",
+            });
+        }
     }
 });
 
 app.post("/signin", async (req, res) => {
-    const email = req.body.email;
-    const password = req.body.password;
-
-    const response = await UserModel.findOne({
-        email: email,
+    const signinSchema = z.object({
+        email: z.string().email().max(50),
+        password: z.string().min(8).max(50),
     });
 
-    if (!response) {
-        res.status(403).json({
-            message: "User does not exist in our db"
-        });
+    const parsedData = signinSchema.safeParse(req.body);
 
-        return;
+    if (!parsedData.success) {
+        return res.json({
+            message: "Invalid username or password",
+        });
     }
 
-    const passwordMatch = await bcrypt.compare(password, response.password);
+    const {email, password} = parsedData.data;
 
-    if (passwordMatch) {
+    try {
+        const response = await UserModel.findOne({
+            email: email,
+        });
+
+        if (!response) {
+            return res.status(403).json({
+                message: "Invalid username or password",
+            });
+        }
+
+        const passwordMatch = await bcrypt.compare(password, response.password);
+ 
+        if (!passwordMatch) {
+            return res.status(403).json({
+                messasge: "Invalid username or password",
+            });
+        }
+
         const token = jwt.sign({
             id: response._id.toString()
-        }, JWT_SECRET);
+        }, JWT_SECRET, {expiresIn: "1h"});
 
-        res.json({
+        return res.json({
             token: token
         });
-    } 
-    else {
-        res.status(403).json({
-            msg: "Incorrect creds"
+    }
+    catch(e) {
+        return res.status(500).json({
+            message: "Internal sever error",
         });
     }
 });
 
 app.post("/todo", auth, async (req, res) => {
     const userId = req.userId;
-    const title = req.body.title;
-    const done = req.body.done;
+
+    const todoSchema = z.object({
+        title: z.string().min(1).max(50),
+        done: z.boolean(),
+    });
+
+    const parsed = todoSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+        return res.status(400).json({
+            message: "Invalid todo input",
+        });
+    }
+
+    const {title, done} = parsed.data;
 
     await TodoModel.create({
         userId, 
@@ -105,7 +133,7 @@ app.post("/todo", auth, async (req, res) => {
     });
 
     res.json({
-        msg: "Todo created"
+        messasge: "Todo created"
     });
 });
 
@@ -113,11 +141,11 @@ app.get("/todos", auth, async (req, res) => {
     const userId = req.userId;
 
     const todos = await TodoModel.find({
-        userId
+        userId,
     });
 
     res.json({
-        todos
+        todos,
     });
 })
 
